@@ -1,9 +1,9 @@
 import { getBearerToken, validateJWT } from "../auth";
 import { respondWithJSON } from "./json";
-import { getVideo } from "../db/videos";
+import { getVideo, updateVideo } from "../db/videos";
 import type { ApiConfig } from "../config";
 import type { BunRequest } from "bun";
-import { BadRequestError, NotFoundError } from "./errors";
+import { BadRequestError, NotFoundError, UserForbiddenError } from "./errors";
 
 type Thumbnail = {
   data: ArrayBuffer;
@@ -11,6 +11,7 @@ type Thumbnail = {
 };
 
 const videoThumbnails: Map<string, Thumbnail> = new Map();
+const MAX_UPLOAD_SIZE = 10 << 20;
 
 export async function handlerGetThumbnail(cfg: ApiConfig, req: BunRequest) {
   const { videoId } = req.params as { videoId?: string };
@@ -45,9 +46,45 @@ export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
   const token = getBearerToken(req.headers);
   const userID = validateJWT(token, cfg.jwtSecret);
 
-  console.log("uploading thumbnail for video", videoId, "by user", userID);
+  const video = getVideo(cfg.db, videoId);
+  if (!video) {
+    throw new NotFoundError("Couldn't find video");
+  }
 
-  // TODO: implement the upload here
+  if (video.userID !== userID) {
+    throw new UserForbiddenError("User Forbidden: user not authorized");
+  }
 
-  return respondWithJSON(200, null);
+  const data = await req.formData();
+  const parsedData = data.get("thumbnail");
+  if (!(parsedData instanceof File)) {
+    throw new BadRequestError("Bad request: error uploading file");
+  }
+
+  if (parsedData.size > MAX_UPLOAD_SIZE) {
+    throw new BadRequestError("Bad request: file too large");
+  }
+
+  const mediaType = parsedData.type;
+  if (!mediaType) {
+    throw new BadRequestError("Missing Content-Type for thumbnail");
+  }
+
+  const bytes: ArrayBuffer = await parsedData.arrayBuffer();
+  if (!bytes) {
+    throw new Error("Error reading file data");
+  }
+
+  const thumbnail: Thumbnail = {
+    data: bytes,
+    mediaType: mediaType,
+  };
+
+  videoThumbnails.set(videoId, thumbnail);
+  const newUrl = `http://localhost:${cfg.port}/api/thumbnails/${videoId}`;
+  video.thumbnailURL = newUrl;
+
+  updateVideo(cfg.db, video);
+
+  return respondWithJSON(200, video);
 }
