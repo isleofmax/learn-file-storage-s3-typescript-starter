@@ -39,7 +39,7 @@ export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
 
   const mediaType = parsedData.type;
   if (!mediaType) {
-    throw new BadRequestError("Missing Content-Type for thumbnail");
+    throw new BadRequestError("Bad request: missing Content-Type");
   }
 
   const bytes: ArrayBuffer = await parsedData.arrayBuffer();
@@ -49,6 +49,9 @@ export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
 
   // find extension
   const ext = mediaTypeToExt(mediaType);
+  if (ext !== "jpeg" && ext !== "png") {
+    throw new BadRequestError("Bad request: wrong Content-Type");
+  }
   const pathFile = path.join(cfg.assetsRoot,`${videoId}.${ext}`);
   Bun.write(pathFile, bytes);
 
