@@ -4,7 +4,8 @@ import { getVideo, updateVideo } from "../db/videos";
 import type { ApiConfig } from "../config";
 import type { BunRequest } from "bun";
 import { BadRequestError, NotFoundError, UserForbiddenError } from "./errors";
-import { Buffer } from "node:buffer";
+import { mediaTypeToExt } from "./assets";
+import path from "node:path";
 
 const MAX_UPLOAD_SIZE = 10 << 20;
 
@@ -45,9 +46,13 @@ export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
   if (!bytes) {
     throw new Error("Error reading file data");
   }
-  const base64Str: string = Buffer.from(bytes).toString("base64");
 
-  const newUrl = `data:${mediaType};base64,${base64Str}`;
+  // find extension
+  const ext = mediaTypeToExt(mediaType);
+  const pathFile = path.join(cfg.assetsRoot,`${videoId}.${ext}`);
+  Bun.write(pathFile, bytes);
+
+  const newUrl = `http://localhost:${cfg.port}/assets/${videoId}.${ext}`;
   video.thumbnailURL = newUrl;
 
   updateVideo(cfg.db, video);
