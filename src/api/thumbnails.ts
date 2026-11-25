@@ -5,7 +5,8 @@ import type { ApiConfig } from "../config";
 import type { BunRequest } from "bun";
 import { BadRequestError, NotFoundError, UserForbiddenError } from "./errors";
 import { mediaTypeToExt } from "./assets";
-import path from "node:path";
+import path from "path";
+import crypto from "crypto";
 
 const MAX_UPLOAD_SIZE = 10 << 20;
 
@@ -52,10 +53,11 @@ export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
   if (ext !== "jpeg" && ext !== "png") {
     throw new BadRequestError("Bad request: wrong Content-Type");
   }
-  const pathFile = path.join(cfg.assetsRoot,`${videoId}.${ext}`);
+  const fileName = crypto.randomBytes(32).toString("base64url");
+  const pathFile = path.join(cfg.assetsRoot,`${fileName}.${ext}`);
   Bun.write(pathFile, bytes);
 
-  const newUrl = `http://localhost:${cfg.port}/assets/${videoId}.${ext}`;
+  const newUrl = `http://localhost:${cfg.port}/assets/${fileName}.${ext}`;
   video.thumbnailURL = newUrl;
 
   updateVideo(cfg.db, video);
