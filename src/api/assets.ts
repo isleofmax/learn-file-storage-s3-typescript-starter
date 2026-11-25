@@ -13,5 +13,5 @@ export function mediaTypeToExt(mediaType: string) {
   if (parts.length !== 2) {
 	  return "bin";
   }
-  return parts[1];
+  return parts[1].toLowerCase();
 }

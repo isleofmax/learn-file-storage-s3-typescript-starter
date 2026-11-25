@@ -43,16 +43,17 @@ export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
     throw new BadRequestError("Bad request: missing Content-Type");
   }
 
-  const bytes: ArrayBuffer = await parsedData.arrayBuffer();
-  if (!bytes) {
-    throw new Error("Error reading file data");
-  }
-
   // find extension
   const ext = mediaTypeToExt(mediaType);
   if (ext !== "jpeg" && ext !== "png") {
     throw new BadRequestError("Bad request: wrong Content-Type");
   }
+
+  const bytes: ArrayBuffer = await parsedData.arrayBuffer();
+  if (!bytes) {
+    throw new Error("Error reading file data");
+  }
+
   const fileName = crypto.randomBytes(32).toString("base64url");
   const pathFile = path.join(cfg.assetsRoot,`${fileName}.${ext}`);
   Bun.write(pathFile, bytes);
