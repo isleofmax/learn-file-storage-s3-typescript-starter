@@ -1,5 +1,6 @@
 import { respondWithJSON } from "./json";
 
+import { rm } from "fs/promises";
 import { type ApiConfig } from "../config";
 import { type BunRequest, type S3File } from "bun";
 import { BadRequestError, NotFoundError, UserForbiddenError } from "./errors";
@@ -50,26 +51,104 @@ export async function handlerUploadVideo(cfg: ApiConfig, req: BunRequest) {
     throw new BadRequestError("Bad request: wrong Content-Type");
   }
 
-  const bytes: ArrayBuffer = await parsedData.arrayBuffer();
-  if (!bytes) {
-    throw new Error("Error reading file data");
-  }
-
   const tempFileName: string = crypto.randomBytes(32).toString("base64url") + "." + ext;
   const pathFile = path.join(tmpdir(), tempFileName);
-  Bun.write(pathFile, bytes);
+  Bun.write(pathFile, parsedData);
 
-  const keyFile = `${videoId}.mp4`;
+  const aspectRatio = await getVideoAspectRatio(pathFile);
+  const processedFilePath = await processVideoForFastStart(pathFile);
+  const keyFile = `${aspectRatio}/${videoId}.mp4`;
+
   const s3File: S3File = cfg.s3Client.file(keyFile);
-
-                //https://tubely-556677.s3.eu-north-1.amazonaws.com/boots-image-horizontal.png
+  await s3File.write(Bun.file(processedFilePath), { type: mediaType });
+  
   const newUrl = `https://${cfg.s3Bucket}.s3.${cfg.s3Region}.amazonaws.com/${keyFile}`;
-  console.log(newUrl),
-  
-  await s3File.write(Bun.file(pathFile), { type: mediaType });
-  
   video.videoURL = newUrl;
   updateVideo(cfg.db, video);
 
+  await Promise.all([
+    rm(pathFile, { force: true }),
+    rm(`${pathFile}.processed.mp4`, { force: true }),
+  ]);
   return respondWithJSON(200, newUrl);
+}
+
+
+export async function getVideoAspectRatio(filePath: string): string {
+  const process = Bun.spawn(
+    [
+      "ffprobe",
+      "-v",
+      "error",
+      "-select_streams",
+      "v:0",
+      "-show_entries",
+      "stream=width,height",
+      "-of",
+      "json",
+      filePath,
+    ],
+    {
+      stdout: "pipe",
+      stderr: "pipe",
+    },
+  );
+
+  const outputText = await new Response(process.stdout).text();
+  const errorText = await new Response(process.stderr).text();
+
+  const exitCode = await process.exited;
+
+  if (exitCode !== 0) {
+    throw new Error(`ffprobe error: ${errorText}`);
+  }
+
+  const output = JSON.parse(outputText);
+  if (!output.streams || output.streams.length === 0) {
+    throw new Error("No video streams found");
+  }
+
+  const { width, height } = output.streams[0];
+
+  let ratio = "";
+  if (width === Math.floor(16 * (height / 9))) {
+    ratio = "landscape";
+  } else if (height === Math.floor(16 * (width / 9))) {
+    ratio = "portrait"
+  } else {
+    ratio = "other";
+  }
+
+  return ratio;
+}
+
+export async function processVideoForFastStart(inputFilePath: string) {
+  const processedFilePath = `${inputFilePath}.processed.mp4`;
+
+  const process = Bun.spawn(
+    [
+      "ffmpeg",
+      "-i",
+      inputFilePath,
+      "-movflags",
+      "faststart",
+      "-map_metadata",
+      "0",
+      "-codec",
+      "copy",
+      "-f",
+      "mp4",
+      processedFilePath,
+    ],
+    { stderr: "pipe" },
+  );
+
+  const errorText = await new Response(process.stderr).text();
+  const exitCode = await process.exited;
+
+  if (exitCode !== 0) {
+    throw new Error(`FFmpeg error: ${errorText}`);
+  }
+
+  return processedFilePath;
 }

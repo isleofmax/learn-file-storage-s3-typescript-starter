@@ -1,6 +1,6 @@
 import { newDatabase } from "./db/db";
 import type { Database } from "bun:sqlite";
-import { s3, S3Client } from "bun";
+import { s3, type S3Client } from "bun";
 
 export type ApiConfig = {
   db: Database;
@@ -28,11 +28,7 @@ const s3Secret = envOrThrow("AWS_SECRET_ACCESS_KEY");
 const port = envOrThrow("PORT");
 
 const db = newDatabase(pathToDB);
-const s3Client = new S3Client({
-  accessKeyId: s3Id,
-  secretAccessKey: s3Secret,
-  bucket: s3Bucket,
-});
+const s3Client = s3;
 
 export const cfg: ApiConfig = {
   db: db,
