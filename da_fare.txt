@@ -1,0 +1,9 @@
+* Rimuovi da Tubely tutta la logica relativa alla firma (signing) degli URL.
+
+- Elimina la funzione `generatePresignedURL` e tutti i riferimenti ad essa.
+
+- Elimina la funzione `dbVideoToSignedVideo` e tutti i riferimenti ad essa.
+
+- In `handlerUploadVideo`, non limitarti a memorizzare la chiave dell'oggetto (object key) nel campo `videoURL`.
+
+- Torna a memorizzare un URL completo nella colonna `videoURL`, utilizzando questa volta l'URL di CloudFront. Impiega il nome di dominio della tua distribuzione (incluso il protocollo `https://`) e inserisci dinamicamente la chiave dell'oggetto S3. Definisci il nome di dominio della distribuzione nel file `.env` e recuperalo tramite il campo `s3CfDistribution` di `ApiConfig`.

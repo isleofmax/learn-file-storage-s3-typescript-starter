@@ -62,19 +62,18 @@ export async function handlerUploadVideo(cfg: ApiConfig, req: BunRequest) {
   const s3File: S3File = cfg.s3Client.file(keyFile);
   await s3File.write(Bun.file(processedFilePath), { type: mediaType });
   
-  const newUrl = `https://${cfg.s3Bucket}.s3.${cfg.s3Region}.amazonaws.com/${keyFile}`;
-  video.videoURL = newUrl;
+  video.videoURL = `${cfg.s3CfDistribution.replace(/\/$/, "")}/${keyFile}`;
   updateVideo(cfg.db, video);
 
   await Promise.all([
     rm(pathFile, { force: true }),
     rm(`${pathFile}.processed.mp4`, { force: true }),
   ]);
-  return respondWithJSON(200, newUrl);
+
+  return respondWithJSON(200, video);
 }
 
-
-export async function getVideoAspectRatio(filePath: string): string {
+export async function getVideoAspectRatio(filePath: string) {
   const process = Bun.spawn(
     [
       "ffprobe",
